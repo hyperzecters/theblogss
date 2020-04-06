@@ -114,15 +114,15 @@ func (u *User) Validate() (map[string]string, bool) {
 
 	switch {
 	case u.Name == "":
-		errMessages["name"] = "Nama tidak boleh kosong."
+		errMessages["name"] = "Nama can't be empty."
 		err = true
 		fallthrough
 	case u.Username == "":
-		errMessages["username"] = "Username tidak boleh kosong."
+		errMessages["username"] = "Username can't be empty."
 		err = true
 		fallthrough
 	case u.Password == "":
-		errMessages["password"] = "Password tidak boleh kosong."
+		errMessages["password"] = "Password can't be empty."
 		err = true
 	}
 

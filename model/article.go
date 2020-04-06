@@ -1,6 +1,8 @@
 package model
 
 import (
+	"database/sql"
+	"fmt"
 	db "go-project/database"
 	"time"
 )
@@ -10,10 +12,10 @@ type Article struct {
 	ID          int
 	Title       string
 	Content     string
-	CreatedAt   time.Time
+	CreatedAt   sql.NullTime
 	IsPublished bool
-	PublishedAt time.Time
-	UpdatedAt   time.Time
+	PublishedAt sql.NullTime
+	UpdatedAt   sql.NullTime
 	User        User
 }
 
@@ -26,7 +28,11 @@ func (a *Article) Create() (int, error) {
 	}
 	defer conn.Close()
 
-	conn.QueryRow("INSERT INTO articles (title, content, created_at, id_user) VALUES ($1, $2, $3, $4) RETURNING id", a.Title, a.Content, time.Now(), a.User.ID).Scan(id)
+	row := conn.QueryRow("INSERT INTO articles (title, content, created_at, id_user, is_published) VALUES ($1, $2, $3, $4, $5) RETURNING id", a.Title, a.Content, time.Now(), a.User.ID, false)
+	err = row.Scan(&id)
+	if err != nil {
+		return 0, err
+	}
 
 	return id, nil
 }
@@ -65,8 +71,6 @@ func (a *Article) Delete() error {
 
 // GetArticle : Get Article
 func (a *Article) GetArticle(id int) error {
-	var userID int
-
 	conn, err := db.Connect()
 	if err != nil {
 		return err
@@ -74,11 +78,17 @@ func (a *Article) GetArticle(id int) error {
 	defer conn.Close()
 
 	row := conn.QueryRow("SELECT * FROM articles WHERE id = $1", id)
-	err = row.Scan(&a.ID, &a.Title, &a.Content, &a.CreatedAt, &a.IsPublished, &a.PublishedAt, &a.UpdatedAt, userID)
+	err = row.Scan(&a.ID, &a.Title, &a.Content, &a.CreatedAt, &a.IsPublished, &a.PublishedAt, &a.UpdatedAt, &a.User.ID)
 	if err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
-	a.User.GetUser(userID)
+
+	err = a.User.GetUser(a.User.ID)
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
 
 	return nil
 }
@@ -91,7 +101,7 @@ func (a *Article) Publish() error {
 	}
 	defer conn.Close()
 
-	conn.QueryRow("UPDATE SET articles is_published = $1, published_at = $2 WHERE id = $3", true, time.Now(), a.ID)
+	conn.QueryRow("UPDATE articles SET is_published = $1, published_at = $2 WHERE id = $3", true, time.Now(), a.ID)
 
 	return nil
 }
@@ -104,7 +114,7 @@ func (a *Article) Unpublish() error {
 	}
 	defer conn.Close()
 
-	conn.QueryRow("UPDATE SET articles is_published = $1, published_at = $2 WHERE id = $3", false, time.Now(), a.ID)
+	conn.QueryRow("UPDATE articles SET is_published = $1 WHERE id = $2", false, a.ID)
 
 	return nil
 }
@@ -129,15 +139,61 @@ func GetAllArticles() ([]Article, error) {
 	}
 	defer conn.Close()
 
-	rows, err := conn.Query("SELECT * FROM articles")
+	rows, err := conn.Query(`SELECT 
+		id,
+		title,
+		LEFT (content, 100) AS content,
+		created_at,
+		is_published,
+		published_at,
+		updated_at,
+		id_user
+	FROM articles WHERE is_published IS true ORDER BY id DESC`)
 	defer rows.Close()
 	if err != nil {
 		return nil, err
 	}
 
 	for rows.Next() {
-		rows.Scan(&article.ID, &article.Title, &article.Content, &article.CreatedAt, &article.IsPublished, &article.PublishedAt, &article.UpdatedAt, userID)
+		rows.Scan(&article.ID, &article.Title, &article.Content, &article.CreatedAt, &article.IsPublished, &article.PublishedAt, &article.UpdatedAt, &userID)
 		article.User.GetUser(userID)
+		articles = append(articles, article)
+	}
+
+	return articles, nil
+}
+
+// Get All Articles
+func GetAllArticlesByUser(idUser int) ([]Article, error) {
+	var articles []Article
+	var article Article
+
+	conn, err := db.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	rows, err := conn.Query(`SELECT 
+		id,
+		title,
+		LEFT (content, 50) AS content,
+		created_at,
+		is_published,
+		published_at,
+		updated_at,
+		id_user
+	FROM articles WHERE 
+		id_user = $1
+	ORDER BY id DESC`, idUser)
+	defer rows.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		rows.Scan(&article.ID, &article.Title, &article.Content, &article.CreatedAt, &article.IsPublished, &article.PublishedAt, &article.UpdatedAt, &idUser)
+		article.User.GetUser(idUser)
 		articles = append(articles, article)
 	}
 

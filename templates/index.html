@@ -1,30 +1,31 @@
 {{define "index"}}
-  {{template "header" .}}
+{{template "header" .}}
 
-  <main role="main">
+<main role="main">
 
-    <!-- Main jumbotron for a primary marketing message or call to action -->
-    <div class="jumbotron">
-      <div class="container">
-        <h1 class="display-3">Welcome to Blogss</h1>
+  <!-- Main jumbotron for a primary marketing message or call to action -->
+  <div class="jumbotron">
+    <div class="container">
+      <h1 class="display-3">Welcome to Blogss</h1>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Example row of columns -->
+    {{range .articles}}
+    <div class="row">
+      <div class="col">
+        <h2>{{.Title}}</h2>
+        <p>{{.Content}}...</p>
+        <p><a class="btn btn-secondary" href="/articles/{{.ID}}" role="button">View details »</a></p>
       </div>
     </div>
+    <hr>
+    {{end}}
 
-    <div class="container">
-      <!-- Example row of columns -->
-      <div class="row">
-        <div class="col">
-          <h2>Lorem ipsum, dolor sit amet.</h2>
-          <p>Lorem, ipsum dolor sit amet consectetur adipisicing elit. Sed corporis laboriosam tempora cumque recusandae reiciendis accusantium libero! Sapiente, obcaecati quisquam placeat quasi, ullam minus odio sunt doloremque dolore impedit labore?</p>
-          <p><a class="btn btn-secondary" href="#" role="button">View details »</a></p>
-        </div>
-      </div>
+  </div> <!-- /container -->
 
-      <hr>
+</main>
 
-    </div> <!-- /container -->
-
-  </main>
-
-  {{template "footer" .}}
+{{template "footer" .}}
 {{end}}

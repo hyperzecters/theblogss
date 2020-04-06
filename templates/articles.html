@@ -1,0 +1,54 @@
+{{define "articles"}}
+{{template "header" .}}
+
+<main role="main">
+
+    <div class="container">
+        <h2 class="mt-3">Articles</h2>
+        <a href="/articles/create" class="btn btn-primary">Create</a>
+        <!-- Example row of columns -->
+        <table class="table mt-3">
+            <thead class="thead-dark">
+                <tr>
+                    <th scope="col">Title</th>
+                    <th scope="col">Is Published</th>
+                    <th scope="col">Created At</th>
+                    <th scope="col">Updated At</th>
+                    <th scope="col">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .articles}}
+                <tr>
+                    <td><a href="/articles/{{.ID}}">{{.Title}}...</a></th>
+                    <td>{{.IsPublished}}</td>
+                    <td>{{.CreatedAt.Value}}</td>
+                    <td>{{.UpdatedAt.Value}}</td>
+                    <td>
+                        {{if .IsPublished}}
+                        <form method="post" action="/articles/{{.ID}}/unpublish">
+                            <input class="btn btn-primary" value="Unpublish" type="submit" />
+                        </form>
+                        {{else}}
+                        <a class="btn btn-primary" href="/articles/{{.ID}}/edit">Edit</a>
+                        <form method="post" action="/articles/{{.ID}}/publish">
+                            <input class="btn btn-primary" value="Publish" type="submit" />
+                        </form>
+                        {{end}}
+                        <form method="post" action="/articles/{{.ID}}/delete">
+                            <input class="btn btn-danger" value="Delete" type="submit" />
+                        </form>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <hr>
+
+    </div> <!-- /container -->
+
+</main>
+
+{{template "footer" .}}
+{{end}}

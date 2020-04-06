@@ -63,9 +63,12 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		data["user"] = nil
 	}
 
-	data["articles"] = model.GetAllArticles
+	var articles []model.Article
+	articles, err := model.GetAllArticles()
 
-	err := templates.ExecuteTemplate(w, "index", data)
+	data["articles"] = articles
+
+	err = templates.ExecuteTemplate(w, "index", data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -82,9 +85,93 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	errs := templates.ExecuteTemplate(w, "login", err)
-	if err != nil {
+	if errs != nil {
 		http.Error(w, errs.Error(), http.StatusInternalServerError)
 	}
+}
+
+// GET "/about"
+func About(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	if userSession := session.Values["user"]; userSession != nil {
+		err := user.GetByUsername(userSession.(string))
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		data["user"] = user
+	} else {
+		data["user"] = nil
+	}
+
+	errs := templates.ExecuteTemplate(w, "about", data)
+	if errs != nil {
+		http.Error(w, errs.Error(), http.StatusInternalServerError)
+	}
+}
+
+// GET "/contactus"
+func ContactUs(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	if userSession := session.Values["user"]; userSession != nil {
+		err := user.GetByUsername(userSession.(string))
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		data["user"] = user
+	} else {
+		data["user"] = nil
+	}
+
+	errs := templates.ExecuteTemplate(w, "contactus", data)
+	if errs != nil {
+		http.Error(w, errs.Error(), http.StatusInternalServerError)
+	}
+}
+
+// POST "/send-message"
+func SendMessage(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var message model.Message
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	if userSession := session.Values["user"]; userSession != nil {
+		err := user.GetByUsername(userSession.(string))
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		data["user"] = user
+	} else {
+		data["user"] = nil
+	}
+
+	message.Name = r.FormValue("name")
+	message.Email = r.FormValue("email")
+	message.Message = r.FormValue("message")
+
+	errMessage, err := message.Validate()
+	if err {
+		data["error"] = errMessage
+		errs := templates.ExecuteTemplate(w, "contactus", data)
+		if errs != nil {
+			http.Error(w, errs.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	if err := message.Create(); err != nil {
+		fmt.Println(err.Error())
+	}
+
+	http.Redirect(w, r, "/contactus?success=true", 302)
 }
 
 // POST "/login"
@@ -265,19 +352,21 @@ func UserUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	data["user"] = user
 
+	nameVal := r.FormValue("name")
+	isAdminVal := r.FormValue("is_admin")
+
 	id := mux.Vars(r)["id"]
 	idUser, _ := strconv.Atoi(id)
 	user.GetUser(idUser)
 
-	user.Name = r.FormValue("name")
-	user.Username = r.FormValue("username")
-	user.IsAdmin, _ = strconv.ParseBool(r.FormValue("is_admin"))
+	user.Name = nameVal
+	user.IsAdmin, _ = strconv.ParseBool(isAdminVal)
 
 	if err := user.Update(); err != nil {
 		fmt.Println(err.Error())
 	}
 
-	http.Redirect(w, r, "/users/"+id+"?success=true", 302)
+	http.Redirect(w, r, "/users?success=true", 302)
 }
 
 // POST "/users/{id}/delete"
@@ -304,6 +393,243 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/users?delete=true", 302)
 }
 
+func Articles(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	if userSession := session.Values["user"]; userSession != nil {
+		err := user.GetByUsername(userSession.(string))
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		data["user"] = user
+	} else {
+		data["user"] = nil
+	}
+
+	var articles []model.Article
+	articles, err := model.GetAllArticlesByUser(user.ID)
+
+	data["articles"] = articles
+
+	err = templates.ExecuteTemplate(w, "articles", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func AddArticle(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	err := templates.ExecuteTemplate(w, "articleCreate", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func CreateArticle(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	article.Title = r.FormValue("title")
+	article.Content = r.FormValue("content")
+	article.User.GetUser(user.ID)
+
+	errMessage, errs := article.Validate()
+	if errs {
+		data["validateError"] = errMessage
+		err := templates.ExecuteTemplate(w, "articleCreate", data)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	idArticle, err := article.Create()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	returnURL := fmt.Sprintf("/articles/%+v", idArticle)
+	http.Redirect(w, r, returnURL, 302)
+}
+
+func ArticleView(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	idArticle, _ := strconv.Atoi(mux.Vars(r)["id"])
+	article.GetArticle(idArticle)
+	data["article"] = article
+
+	err := templates.ExecuteTemplate(w, "article", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func ArticlePublish(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	id := mux.Vars(r)["id"]
+	idArticle, _ := strconv.Atoi(id)
+	article.GetArticle(idArticle)
+
+	if err := article.Publish(); err != nil {
+		fmt.Println(err.Error())
+	}
+
+	http.Redirect(w, r, "/articles?publish=ok", 302)
+}
+
+func ArticleUnpublish(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	id := mux.Vars(r)["id"]
+	idArticle, _ := strconv.Atoi(id)
+	article.GetArticle(idArticle)
+
+	if err := article.Unpublish(); err != nil {
+		fmt.Println(err.Error())
+	}
+
+	http.Redirect(w, r, "/articles?unpublish=ok", 302)
+}
+
+func ArticleEdit(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	idArticle, _ := strconv.Atoi(mux.Vars(r)["id"])
+	article.GetArticle(idArticle)
+	data["article"] = article
+
+	err := templates.ExecuteTemplate(w, "articleEdit", data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func ArticleUpdate(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	idArticle, _ := strconv.Atoi(mux.Vars(r)["id"])
+	article.GetArticle(idArticle)
+	data["article"] = article
+
+	article.Title = r.FormValue("title")
+	article.Content = r.FormValue("content")
+	article.User.GetUser(user.ID)
+
+	errMessage, errs := article.Validate()
+	if errs {
+		data["validateError"] = errMessage
+		err := templates.ExecuteTemplate(w, "articleEdit", data)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	err := article.Update()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	http.Redirect(w, r, "/articles", 302)
+}
+
+func ArticleDelete(w http.ResponseWriter, r *http.Request) {
+	var user model.User
+	var article model.Article
+	data := map[string]interface{}{}
+	session, _ := store.Get(r, "blogss")
+
+	user.GetByUsername(session.Values["user"].(string))
+	if !user.IsAdmin {
+		http.Redirect(w, r, "/", 302)
+		return
+	}
+	data["user"] = user
+
+	idArticle, _ := strconv.Atoi(mux.Vars(r)["id"])
+	article.GetArticle(idArticle)
+	data["article"] = article
+
+	err := article.Delete()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	http.Redirect(w, r, "/articles", 302)
+}
+
 func main() {
 	r := mux.NewRouter()
 
@@ -314,15 +640,19 @@ func main() {
 	r.HandleFunc("/logout", Logout).Methods("GET")
 	r.HandleFunc("/register", Register).Methods("GET")
 	r.HandleFunc("/register", RegisterUser).Methods("POST")
+	r.HandleFunc("/about", About).Methods("GET")
+	r.HandleFunc("/contactus", ContactUs).Methods("GET")
+	r.HandleFunc("/send-message", SendMessage).Methods("POST")
 
-	// r.HandleFunc("/articles}", Articles).Methods("GET")
-	// r.HandleFunc("/articles/create}", AddArticle).Methods("GET")
-	// r.HandleFunc("/articles/create}", CreateArticle).Methods("POST")
-	// r.HandleFunc("/articles/{id:[0-9]+}", ArticleView).Methods("GET")
-	// r.HandleFunc("/articles/{id:[0-9]+}/edit", ArticleEdit).Methods("GET")
-	// r.HandleFunc("/articles/{id:[0-9]+}/update", ArticleUpdate).Methods("POST")
-	// r.HandleFunc("/articles/{id:[0-9]+}/publish", ArticlePublish).Methods("POST")
-	// r.HandleFunc("/articles/{id:[0-9]+}/unpublish", ArticleUnpublish).Methods("POST")
+	r.HandleFunc("/articles", Articles).Methods("GET")
+	r.HandleFunc("/articles/create", AddArticle).Methods("GET")
+	r.HandleFunc("/articles/create", CreateArticle).Methods("POST")
+	r.HandleFunc("/articles/{id:[0-9]+}", ArticleView).Methods("GET")
+	r.HandleFunc("/articles/{id:[0-9]+}/edit", ArticleEdit).Methods("GET")
+	r.HandleFunc("/articles/{id:[0-9]+}/update", ArticleUpdate).Methods("POST")
+	r.HandleFunc("/articles/{id:[0-9]+}/publish", ArticlePublish).Methods("POST")
+	r.HandleFunc("/articles/{id:[0-9]+}/unpublish", ArticleUnpublish).Methods("POST")
+	r.HandleFunc("/articles/{id:[0-9]+}/delete", ArticleDelete).Methods("POST")
 
 	r.HandleFunc("/users", UserList).Methods("GET")
 	r.HandleFunc("/users/create", AddUser).Methods("GET")
